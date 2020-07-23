@@ -45,9 +45,6 @@ WARNING:
 #include "PSSM.h"
 #include "searchPSSM.h"
  
-#ifdef MPI
-    #include "mpi.h"
-#endif
 #define MASTER 0
 #define DATA_TAG 1
 #define BREAK_TAG 2
@@ -71,128 +68,12 @@ const char *extracted_matrix_filename = "extracted.matrix";
 const char *subject_filename = "subject.fasta";
 const char *results_filename = "search_matches.tab";
 
-void master_thread(Sequence *subject) {
-	int size = 0;
-	FILE *fd = NULL;
-	MPI_Status status;
-	int message[5];
-	int *profile_id;;
-	int *subject_id;
-	int *position;
-	int *score; // multiplied by 10000
-	int *evalue;
-	int break_counter = 0;
-
-	profile_id = &message[0];
-	subject_id = &message[1];
-	position = &message[2];
-	score = &message[3];
-	evalue = &message[4];
-	
-	MPI_Comm_size(MPI_COMM_WORLD, &size);
-	if (size == 1) {
-		return;
-	}
-
-	fd = fopen(results_filename, "w");
-	assert(fd != NULL);
-	
-	while (1) {
-		MPI_Recv(&message, 5, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-		if (status.MPI_TAG == BREAK_TAG) {
-			if (++break_counter == size - 1) {
-				break;
-			}
-		}
-		#ifndef NDEBUG
-			printf("match: [%d] [%2.2f] [%-90.90s]\n", *profile_id, (double)*score/10000, (subject + *subject_id)->description);
-		#endif
-		
-		fprintf(fd, "%d\t%2.2f\t%.2f\t%d\t%-90.90s\n", *profile_id, (double)*score/10000, (double)*evalue, *position, (subject + *subject_id)->description);
-	}
-		
-	fclose(fd);
-	MPI_Barrier(MPI_COMM_WORLD);
-	MPI_Finalize();
-}
-
 int main (int argc, char *argv[]) {
 	///////////////////////////////////
-	int rank = 0;
-	int size = 1;
-	int rc = 0;
+	//int rank = 0;
+	//int size = 1;
+	//int rc = 0;
 	
-	#ifdef MPI
-	rc = MPI_Init(&argc, &argv);
-	if (rc != MPI_SUCCESS) {
-		fprintf(stderr, "Error while initializing MPI\n");
-		MPI_Abort(MPI_COMM_WORLD, rc);
-		exit(1);
-	}	
-/*
-        MPI_Datatype Matrixtype;
-        MPI_Datatype type[9] = {MPI_LB, MPI_CHAR, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_UB}; 
-        int blocklen[9] = {1, 52, 1, 1, 1, 1, 1, 50*26, 1};
-        MPI_Aint disp[9];
-
-        MPI_Address(matrix, &disp[0]);
-        MPI_Address(&matrix->initial_segment, &disp[1]);
-        MPI_Address(&matrix->K, &disp[2]);
-        MPI_Address(&matrix->N, &disp[3]);
-        MPI_Address(&matrix->p, &disp[4]);
-        MPI_Address(&matrix->score, &disp[5]);
-        MPI_Address(&matrix->omega, &disp[6]);
-        MPI_Address(&matrix->freq, &disp[7]);
-        disp[8] = disp[7] + sizeof matrix->freq;
-
-        for (rc=0; rc<9; rc++) {
-    	    printf("disp[%d] = %d\n", rc, disp[rc]);
-        }
-
-        MPI_Type_struct(9, blocklen, disp, type, &Matrixtype);
-        MPI_Type_commit(&Matrixtype);
-        //MPI_Send(&mx, 1, Matrixtype, dest, tag, comm);
-*/	
-	//MPI_Datatype Matrixtype, oldtypes[1];
-	//MPI_Aint offsets[1], extent;
-	//int blockcounts[1];
-	
-	// setup 52 chars: initial_segment
-	//offsets[0] = 0;
-	//oldtypes[0] = MPI_CHAR;
-	//blockcounts[0] = 52;
-
-/*	
-	// setup ints: K, N
-	MPI_Type_extent(MPI_CHAR, &extent);
-	offsets[1] = blockcounts[0]*extent;
-	oldtypes[1] = MPI_INT;
-	blockcounts[1] = 2;
-	
-	// setup doubles: p, score, omega, freq[50*26]
-	MPI_Type_extent(MPI_INT, &extent);
-	offsets[2] = blockcounts[1]*extent;
-	oldtypes[2] = MPI_DOUBLE;
-	blockcounts[2] = 3 + 50*26;
-*/	
-	//MPI_Type_struct(1, blockcounts, offsets, oldtypes, &Matrixtype);
-
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &size);
-	
-	if (size < 2) {
-		printf("More than one CPU is required\nExiting\n");
-		MPI_Finalize();
-		return(1);
-	}
-	// min MPI size = 2 CPU
-	// rank 0 does collection of matches
-	assert(size > 1);
-	
-	#ifndef DNEBUG
-	fprintf(stderr, "MPI rank %d started. Total %d CPU\n", rank, size);
-	#endif		
-	#endif
 	///////////////////////////////////
 	//in R: sample(0:49)	
 	int random_index[11][50] = 
@@ -232,6 +113,7 @@ int main (int argc, char *argv[]) {
 	FILE *fd_aln = NULL;
 	FILE *fd_scores = NULL;
 	FILE *fd_pos_scores = NULL;
+	FILE *fd = NULL;
 
 	double E = 1.0;
 	double p = 0.0;
@@ -368,28 +250,19 @@ int main (int argc, char *argv[]) {
 	//assert(E > 0.0);	
 	if (E < 1.0) E=1.0;
 
-	// min MPI size = 2 CPU
-	// rank 0 does collection of matches
-	assert(size > 1);
-
-	if (MASTER == rank) {
-		master_thread(subject);
-		return(0);
-	}
-
-	int slice = (int)ceil((double)matrices_count / (size - 1));
-	int from = (rank - 1)*slice;
-	int to = (rank + 1 < size)?from + slice: matrices_count;
+	//int slice = (int)ceil((double)matrices_count / (size - 1));
+	//int from = (rank - 1)*slice;
+	//int to = (rank + 1 < size)?from + slice: matrices_count;
+	int from = 0;
+	int to = matrices_count;
 
 	char scores_filename[50];
 	int last_informative_position = 0;
 	int informative_positions = 0;
 	int last_position = 0;
 	
-	#ifndef NDEBUG
-	printf("DISTRIBUTING WORK [rank %d] %d matrices, size=%d, slice=%d, from=%d, to=%d\n", rank, matrices_count, size, slice, from, to);
-	#endif
-				
+	fd = fopen(results_filename, "w");
+	
 	for (m=from; m<to; m++) {
 		matrix = matrices + m;
 		
@@ -397,7 +270,6 @@ int main (int argc, char *argv[]) {
 			snprintf(scores_filename, 50, "search_scores_%d_shuffled.tab", matrix->id); 
 			fd_scores = fopen(scores_filename, "w");
 		}
-
 			for (i=50;i--;) for (j=26;j--;) {
 				PSSM[i][j] = 0.0;
 			}
@@ -405,13 +277,12 @@ int main (int argc, char *argv[]) {
 				Information[i] = 0.0;
 			}
 			
-			double sum_aa = 0;
-			double fragment_freq = 0.0;
-			double pc = 0.0;
+			// double sum_aa = 0;
+			// double fragment_freq = 0.0;
+			// double pc = 0.0;
 			double H_sum = 0.0; // attention: it is in nats, not in bits
 			
 			//print_PSSM(matrix->freq, 0.0);
-
 			informative_positions = 0;
 			last_informative_position = 0;
 			last_position = 0;
@@ -423,7 +294,6 @@ int main (int argc, char *argv[]) {
 						H_sum += matrix->freq[i][q] * (log(matrix->freq[i][q])/log(2));
 					}
 				}
-				
 				// if information weighting is disabled consider that each position is equal =~ 4.3 bits
 				if (information_weighting) {
 					Information[i] = log(20)/log(2) + H_sum;
@@ -466,7 +336,6 @@ int main (int argc, char *argv[]) {
 			
 
 			//print_PSSM(PSSM, 0);
-
 			List *list = NULL, *item = NULL, *curr = NULL, *prev = NULL;
 			int list_length = 0;
 			double minS = 0.0;
@@ -594,7 +463,7 @@ int main (int argc, char *argv[]) {
 			
 			// Use S(p) as threshold on natural matrix matches:
 			int protein_length;
-			int message[5];
+			//int message[5];
 			int real_E = 0;
 			double pos_scores[50]; 
 			
@@ -657,12 +526,13 @@ int main (int argc, char *argv[]) {
 						    }
 						}
 						
-						message[0] = matrix->id; 	  // profile
-						message[1] = f;			  // sequence
-						message[2] = l;			  // position
-						message[3] = (int)round(S*10000); // score
-						message[4] = real_E; 		  // Evalue
-						MPI_Send(&message, 5, MPI_INT, MASTER, DATA_TAG, MPI_COMM_WORLD);
+						//message[0] = matrix->id; 	  // profile
+						//message[1] = f;			  // sequence
+						//message[2] = l;			  // position
+						//message[3] = (int)round(S*10000); // score
+						//message[4] = real_E; 		  // Evalue
+						//MPI_Send(&message, 5, MPI_INT, MASTER, DATA_TAG, MPI_COMM_WORLD);
+						fprintf(fd, "%d\t%2.2f\t%.2f\t%d\t%-90.90s\n", matrix->id, S, (double)real_E, l, (subject + f)->description);
 						
 						if (output_alignment) {
 							snprintf(match_header, 120, "%s", (subject + f)->description);
@@ -686,12 +556,7 @@ int main (int argc, char *argv[]) {
 				fclose(fd_pos_scores);
 			}
 	}
-	MPI_Send(0, 0, MPI_INT, MASTER, BREAK_TAG, MPI_COMM_WORLD);
-
-	#ifdef MPI
-	MPI_Barrier(MPI_COMM_WORLD);
-	MPI_Finalize();
-	#endif
+	fclose(fd);
 		
 	return(0);
 }

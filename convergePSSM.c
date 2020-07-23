@@ -48,14 +48,11 @@ INPUT:
 #include <ctype.h>
 #include <stdbool.h>
 #include <errno.h>
-#include <error.h>
+//#include <error.h>
 
 #include  "PSSM.h"
 #include  "convergePSSM.h"
 
-#ifdef MPI
-    #include "mpi.h"
-#endif
 #define MASTER 0
 
 #define MAXLEN 250
@@ -78,77 +75,6 @@ const char *proteome_filename = "proteome.fasta";
 
 int main (int argc, char *argv[]) {
 	//Matrix *matrix = NULL;
-	///////////////////////////////////
-	int rank = 0;
-	int size = 1;
-	int rc = 0;
-	
-	#ifdef MPI
-	rc = MPI_Init(&argc, &argv);
-	if (rc != MPI_SUCCESS) {
-		fprintf(stderr, "Error while initializing MPI\n");
-		MPI_Abort(MPI_COMM_WORLD, rc);
-		exit(1);
-	}
-	
-	
-	fprintf(stderr, "MPI rank %d started. Total %d CPU\n", rank, size);
-	
-/*
-        MPI_Datatype Matrixtype;
-        MPI_Datatype type[9] = {MPI_LB, MPI_CHAR, MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_UB}; 
-        int blocklen[9] = {1, 52, 1, 1, 1, 1, 1, 50*26, 1};
-        MPI_Aint disp[9];
-
-        MPI_Address(matrix, &disp[0]);
-        MPI_Address(&matrix->initial_segment, &disp[1]);
-        MPI_Address(&matrix->K, &disp[2]);
-        MPI_Address(&matrix->N, &disp[3]);
-        MPI_Address(&matrix->p, &disp[4]);
-        MPI_Address(&matrix->score, &disp[5]);
-        MPI_Address(&matrix->omega, &disp[6]);
-        MPI_Address(&matrix->freq, &disp[7]);
-        disp[8] = disp[7] + sizeof matrix->freq;
-
-        for (rc=0; rc<9; rc++) {
-    	    printf("disp[%d] = %d\n", rc, disp[rc]);
-        }
-
-        MPI_Type_struct(9, blocklen, disp, type, &Matrixtype);
-        MPI_Type_commit(&Matrixtype);
-        //MPI_Send(&mx, 1, Matrixtype, dest, tag, comm);
-*/	
-	//MPI_Datatype Matrixtype, oldtypes[1];
-	//MPI_Aint offsets[1], extent;
-	//int blockcounts[1];
-	
-	// setup 52 chars: initial_segment
-	//offsets[0] = 0;
-	//oldtypes[0] = MPI_CHAR;
-	//blockcounts[0] = 52;
-
-/*	
-	// setup ints: K, N
-	MPI_Type_extent(MPI_CHAR, &extent);
-	offsets[1] = blockcounts[0]*extent;
-	oldtypes[1] = MPI_INT;
-	blockcounts[1] = 2;
-	
-	// setup doubles: p, score, omega, freq[50*26]
-	MPI_Type_extent(MPI_INT, &extent);
-	offsets[2] = blockcounts[1]*extent;
-	oldtypes[2] = MPI_DOUBLE;
-	blockcounts[2] = 3 + 50*26;
-*/	
-	//MPI_Type_struct(1, blockcounts, offsets, oldtypes, &Matrixtype);
-
-	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &size);	
-	
-	#ifndef DNEBUG
-	fprintf(stderr, "MPI rank %d started. Total %d CPU\n", rank, size);
-	#endif		
-	#endif
 	///////////////////////////////////
 	
 	int a;
@@ -214,8 +140,8 @@ int main (int argc, char *argv[]) {
 			    length = atoi(argv[a+1]);
 			    printf("OPTION: desired profile length L = %d\n", length);
 			    
-			    if (length != 30 || length !=50) {
-				printf("WARNING: incorrect profile length specified!\n");
+			    if (length != 29 && length != 30 && length !=50) {
+				printf("WARNING: incorrect profile length specified (only 29, 30 and 50 allowed)!\n");
 			    }
 			}
 		}
@@ -264,7 +190,7 @@ int main (int argc, char *argv[]) {
 	
 	Sequence *initial_segments = NULL, **pinitial_segments = &initial_segments;
 	int N_initial = 0;  	  // # initial sequences
-	int N_initial_slice = 0;  // # initial sequences
+	//int N_initial_slice = 0;  // # initial sequences
 	Sequence *proteome = NULL, **pproteome = &proteome;
 	int N_proteome = 0; // # proteome sequences
 	int N = 0; 	    // # fragments in all proteomic sequences
@@ -323,21 +249,13 @@ int main (int argc, char *argv[]) {
 	double FP = E_value;
 	double p = FP/N;
 	
-	N_initial_slice = (int)floor((double)N_initial / (double)size);	
-	
-	#ifndef NDEBUG
-	printf("SeqProtoPSSM: Ninit=%d NinitSlice=%d Nproteome=%d N=%d p=%E FP=%d Format=%d\n"
-	       "---------------------------------------------------------------\n",
-	       N_initial, N_initial_slice, N_proteome, N, p, (int)FP, input_format);
-	#endif
-	
 	List *list = NULL, *item = NULL, *curr = NULL, *prev = NULL;
 	int list_length = 0;
 	double maxS = 0.0;
-	int from = rank*N_initial_slice;
-	int to = (rank+1 < size)?from + N_initial_slice: N_initial;
+	int from = 0;
+	int to = N_initial;
 	
-	int last_informative_position = 0;	
+	int last_informative_position = 0;
 	
 	//N_initial
 	for (k = from; k < to; k++) {
@@ -564,7 +482,11 @@ int main (int argc, char *argv[]) {
 							} else {
 								if (length == 30) {
 								    S += Information[random_index_30[randomization][i]] * PSSM[random_index_30[randomization][i]][q-'A'];
-								} else { //50
+								}
+								if (length == 29) {
+								    S += Information[random_index_29[randomization][i]] * PSSM[random_index_29[randomization][i]][q-'A'];
+								}
+								if (length == 50) {
 								    S += Information[random_index_50[randomization][i]] * PSSM[random_index_50[randomization][i]][q-'A'];
 								}
 							}
@@ -603,7 +525,7 @@ int main (int argc, char *argv[]) {
 							}
 						}
 						maxS = list->score;
-						next_segment: continue;
+						continue;
 					}
 				}
 				while (list != NULL) {
@@ -702,7 +624,7 @@ int main (int argc, char *argv[]) {
 							F[i][protein[m+i]-'A']++;
 						}
 					}
-					next_segment2: continue;
+					continue;
 				}
 			}
 			if (output_distributions) {
@@ -720,8 +642,8 @@ int main (int argc, char *argv[]) {
 				PSSM[i][j] = 0.0;
 				M1[i][j] = 0.0;
 			}
-			double sum_aa = 0;
-			double fragment_freq = 0.0;
+			//double sum_aa = 0;
+			//double fragment_freq = 0.0;
 			//double pc = 0.0;
 			double composition_sum_squares = 0.0;
 
@@ -813,8 +735,8 @@ int main (int argc, char *argv[]) {
 			} // iterations. while not converged
 			
 			// live update of the derivation process
-			write_Matrices("output.1.matrix", converged_matrices, converged_matrices_count, rank);
-			write_VariableMatrixFreq("output.4.matrix", converged_matrices, converged_matrices_count, rank, composition);
+			write_Matrices("output.1.matrix", converged_matrices, converged_matrices_count);
+			write_VariableMatrixFreq("output.4.matrix", converged_matrices, converged_matrices_count,  composition);
 			
 			if (origin_is_matrix) {
 			    // do not iterate over segments if starting from matrix
@@ -823,7 +745,7 @@ int main (int argc, char *argv[]) {
 		} // initial segment
 	} // take another origin
 
-	printf("Final stage reached for rank %d.\n", rank);
+	//printf("Final stage reached for rank %d.\n", rank);
 	
 	for (k=0; k < converged_matrices_count;k++) {
 		matrix = converged_matrices + k;
@@ -832,8 +754,8 @@ int main (int argc, char *argv[]) {
 		#endif
 	}
 	
-	write_Matrices("output.1.matrix", converged_matrices, converged_matrices_count, rank);
-	write_VariableMatrixFreq("output.4.matrix", converged_matrices, converged_matrices_count, rank, composition);
+	write_Matrices("output.1.matrix", converged_matrices, converged_matrices_count);
+	write_VariableMatrixFreq("output.4.matrix", converged_matrices, converged_matrices_count, composition);
 
 	#ifdef MPI
 	MPI_Barrier(MPI_COMM_WORLD);

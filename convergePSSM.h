@@ -11,9 +11,9 @@ int load_fasta_sequences(const char *filename, Sequence **psequences, bool remov
 	int i = 0;
 
 	fd = fopen(filename, "r");
-	if (fd == NULL) {
-		error(1, errno, "error while opening file %s", filename);
-	}
+	//if (fd == NULL) {
+	//	error(1, errno, "error while opening file %s", filename);
+	//}
 	assert(fd != NULL);
 
 	char *buf = (char *)calloc(4096, sizeof(char));
@@ -124,7 +124,7 @@ void print_PSSM(double M[MAX_PSSM_LENGTH][26], double threshold) {
 	printf("\n");
 }
 
-void write_Matrices(const char *filename, Matrix *matrices, int n, int suffix) {
+void write_Matrices(const char *filename, Matrix *matrices, int n) {
 	FILE *fd = NULL;
 	const int proto_format_version = 1;
 	int m=0, i=0, j=0;
@@ -135,7 +135,7 @@ void write_Matrices(const char *filename, Matrix *matrices, int n, int suffix) {
 		return;
 	}
 	
-	snprintf(full_filename, 256, "%s.%d", filename, suffix);
+	snprintf(full_filename, 256, "%s", filename);
 
 	fd = fopen(full_filename, "w");
 	assert(fd != NULL);
@@ -486,7 +486,7 @@ int load_VariableMatricesFreq(const char *filename, Matrix **pmatrices, double c
 }
 
 
-void write_VariableMatrixFreq(const char *filename, Matrix *matrices, int n, int suffix, double composition[20]) {
+void write_VariableMatrixFreq(const char *filename, Matrix *matrices, int n,  double composition[20]) {
 	FILE *fd = NULL;
 	int m=0, i=0, j=0;
 	Matrix *M=NULL;
@@ -499,7 +499,7 @@ void write_VariableMatrixFreq(const char *filename, Matrix *matrices, int n, int
 		return;
 	}
 			
-	snprintf(full_filename, 256, "%s.%d", filename, suffix);
+	snprintf(full_filename, 256, "%s", filename);
 	fd = fopen(full_filename, "w");
 	assert(fd != NULL);
 	

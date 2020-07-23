@@ -23,7 +23,7 @@ INPUT:
 #include <ctype.h>
 #include <stdbool.h>
 #include <errno.h>
-#include <error.h>
+//#include <error.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "mpi.h"

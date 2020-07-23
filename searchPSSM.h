@@ -1,6 +1,5 @@
 #include <errno.h>
 
-
 int load_fasta_sequences(const char *filename, Sequence **psequences, bool removex) {
 	FILE *fd = NULL;
 	char *seq = NULL;
@@ -11,9 +10,9 @@ int load_fasta_sequences(const char *filename, Sequence **psequences, bool remov
 	int i = 0;
 
 	fd = fopen(filename, "r");
-	if (fd == NULL) {
-		error(1, errno, "error while opening file %s", filename);
-	}
+	//if (fd == NULL) {
+	//	error(1, errno, "error while opening file %s", filename);
+	//}
 	assert(fd != NULL);
 
 	for (;;) {
